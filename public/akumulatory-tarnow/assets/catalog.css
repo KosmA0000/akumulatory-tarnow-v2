@@ -579,7 +579,7 @@ main{width:min(1440px,calc(100% - 96px));margin:auto;padding:126px 0 110px;min-h
     flex: 0 0 136px;
     width: 136px;
     height: 40px;
-    background: url('/akumulatory-tarnow-v2/assets/media/logo-akumulatory-tarnow.png') center / contain no-repeat;
+    background: url('/akumulatory-tarnow-v2/assets/media/logo-akumulatory-tarnow-400.webp') center / contain no-repeat;
     font-size: 0;
   }
 }

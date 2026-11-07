@@ -20,7 +20,8 @@ if (imageButton) {
   const popup = one('#product-image-dialog');
   imageButton.addEventListener('click', () => {
     const source = one('img',imageButton);
-    const large = one('[data-large-image]',popup);
+    let large = one('[data-large-image]',popup);
+    if (!large) { large = document.createElement('img'); large.setAttribute('data-large-image',''); const slot = one('[data-large-image-slot]',popup); slot ? slot.replaceWith(large) : popup.append(large); }
     large.src=source.currentSrc||source.src;large.alt=source.alt;
     popup.showModal();
   });

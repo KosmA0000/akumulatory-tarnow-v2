@@ -12,7 +12,8 @@ export function setupMobileHero(track) {
   const statement = track.querySelector('.hero-running-copy');
   const batteries = document.querySelector('.mobile-battery-offer');
   const trustedBrands = document.querySelector('.services-overview .mobile-trusted-brands');
-  const originalPositions = [eyebrow, title, offer, assistance, statement, batteries].map(element => ({
+  const early = window.__mobileHeroOriginal;
+  const originalPositions = [eyebrow, title, offer, assistance, statement, batteries].map(element => early?.get(element) || ({
     element,
     parent: element.parentNode,
     next: element.nextSibling,
