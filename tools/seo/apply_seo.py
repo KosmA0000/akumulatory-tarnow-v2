@@ -22,7 +22,11 @@ from site_data import (BRAND, EMAIL, FACEBOOK, FREE_SERVICES, LOCATIONS, PAGES, 
 
 REPO = Path(__file__).resolve().parents[2]
 SITE = REPO / "public" / "akumulatory-tarnow"
-SEO_START, SEO_END = "<!--seo-->", "<!--/seo-->"
+# Tagi wstawiane do <head>. Pierwotne strony nie miały żadnego z nich, więc można je bezpiecznie usuwać i wstawiać od nowa.
+SEO_TAGS = (r'<link href="[^"]*" rel="canonical"/>', r'<meta content="[^"]*" name="robots"/>',
+            r'<meta content="[^"]*" property="og:[a-z_:]+"/>', r'<meta content="summary_large_image" name="twitter:card"/>',
+            r'<script type="application/ld\+json">.*?</script>')
+OLD_MARKERS = ("<!--seo-->", "<!--/seo-->")  # znaczniki z wcześniejszej wersji skryptu, usuwane przy każdym przebiegu
 ACRONYMS = {"UPS", "AGM", "EFB", "OE", "ASO"}
 # kategorie demo z modułu bloga ("Kategoria 1", "Sub Category 1/2"): noindex, poza sitemapą, stare adresy -> /porady/
 DEMO_BLOG = ("porady/kategoria-1/", "porady/sub-category-1/", "porady/sub-category-2/")
@@ -248,7 +252,7 @@ def brand_categories(name: str, items: list[dict]) -> list[tuple[int, int]]:
 # ---------------------------------------------------------------- page shells for new pages
 def shell(template: Path) -> tuple[str, str]:
     t = read(template)
-    t = re.sub(re.escape(SEO_START) + ".*?" + re.escape(SEO_END), "", t, flags=re.S)
+    t = strip_seo(t)
     head_part = t[: t.index('<main id="main">')]
     tail = t[t.index("</main>") + len("</main>"):]
     return head_part, tail
@@ -614,12 +618,24 @@ def head_block(path: str, text: str, og_type: str, image: str, graph: list[dict]
         ld = json.dumps({"@context": "https://schema.org", "@graph": graph}, ensure_ascii=False, separators=(",", ":"))
         ld = ld.replace("</", "<\\/")
         tags.append(f'<script type="application/ld+json">{ld}</script>')
-    return SEO_START + "".join(tags) + SEO_END
+    return "".join(tags)
+
+
+def strip_seo(text: str) -> str:
+    """Usuwa z <head> tagi SEO wstawione przez poprzedni przebieg (bez komentarzy-znaczników w kodzie strony)."""
+    for m in OLD_MARKERS:
+        text = text.replace(m, "")
+    end = text.find("</head>")
+    if end < 0:
+        return text
+    head = text[:end]
+    for rx in SEO_TAGS:
+        head = re.sub(rx, "", head, flags=re.S)
+    return head + text[end:]
 
 
 def inject_head(text: str, block: str) -> str:
-    text = re.sub(re.escape(SEO_START) + ".*?" + re.escape(SEO_END), "", text, flags=re.S)
-    return text.replace("</head>", block + "</head>", 1)
+    return strip_seo(text).replace("</head>", block + "</head>", 1)
 
 
 OG_DEFAULT = f"{PROD_ORIGIN}/assets/media/og-default.jpg"
@@ -704,9 +720,11 @@ def patch_assets() -> None:
     patch(a / "catalog.css", [("assets/media/logo-akumulatory-tarnow.png'", "assets/media/logo-akumulatory-tarnow-400.webp'")])
     patch(a / "mobile.css", [("assets/media/logo-akumulatory-tarnow.png'", "assets/media/logo-akumulatory-tarnow-400.webp'")])
     # strony zbiorcze: nagłówki grup produktów i linki "Zobacz też" na stronach produktów
-    css = read(a / "catalog.css")
-    if "/* seo: strony zbiorcze */" not in css:
-        write(a / "catalog.css", css.rstrip("\n") + "\n/* seo: strony zbiorcze */\n"
+    css = read(a / "catalog.css").replace("\n/* seo: strony zbiorcze */\n", "\n")
+    if ".collection-group+.collection-group" in css:
+        write(a / "catalog.css", css)
+    else:
+        write(a / "catalog.css", css.rstrip("\n") + "\n"
               ".collection-group+.collection-group{margin-top:48px}"
               ".collection-group>h2{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:22px;line-height:1.3;letter-spacing:-.02em;margin:0 0 18px}"
               ".collection-group>h2 span{color:var(--muted);font-size:13px;font-weight:400;letter-spacing:0}"
@@ -782,9 +800,8 @@ def write_redirects() -> None:
         if old.strip("/") in ("4-men", "5-women", "7-stationery", "8-home-accessories"):
             continue
         rules.append((old, target))
-    lines = ["# Wygenerowane przez tools/seo/apply_seo.py: przekierowania 301 ze starego sklepu PrestaShop.",
-             "# Trzymać co najmniej 12 miesięcy (Google: site moves with URL changes).", "",
-             "ErrorDocument 404 /404.html", "Options -Indexes", "",
+    # bez komentarzy w pliku: na GitHub Pages .htaccess i _redirects są publicznie dostępne
+    lines = ["ErrorDocument 404 /404.html", "Options -Indexes", "",
              "<IfModule mod_headers.c>",
              '  Header always set X-Content-Type-Options "nosniff"',
              '  Header always set Referrer-Policy "strict-origin-when-cross-origin"',
@@ -803,7 +820,7 @@ def write_redirects() -> None:
         lines.append(f"  RedirectMatch 301 ^{re.escape(old)}/?$ {target}")
     lines.append("</IfModule>")
     write(SITE / ".htaccess", "\n".join(lines) + "\n")
-    write(SITE / "_redirects", "# Netlify / Cloudflare Pages: przekierowania 301 ze starego sklepu\n/logowanie / 301\n"
+    write(SITE / "_redirects", "/logowanie / 301\n"
           + "".join(f"{old} {target} 301\n" for old, target in rules))
 
 
