@@ -438,6 +438,14 @@ def collection_nav(items: dict[str, list[dict]]) -> str:
             '</p></div></div>')
 
 
+def collection_filter(items: dict[str, list[dict]]) -> str:
+    """Grupa linków w panelu filtrów katalogu (bez pól formularza, więc nie wpływa na filtrowanie w catalog.js)."""
+    rows = "".join(f'<li><a href="{PREFIX}oferta/{c["slug"]}/">{esc(c["label"][0].upper() + c["label"][1:])}<small>{len(items[c["slug"]])}</small></a></li>'
+                   for c in COLLECTIONS if items[c["slug"]])
+    return ('<details class="filter-group" data-collections-filter="" open=""><summary>Technologia i pojemność'
+            f'<span aria-hidden="true">+</span></summary><ul class="category-tree">{rows}</ul></details>')
+
+
 def build_collection_pages(items: dict[str, list[dict]]) -> dict[str, dict]:
     head_part, tail = shell(SITE / "marki" / "index.html")
     meta = {}
@@ -843,6 +851,14 @@ def main() -> None:
         if path in COLL_NAV_PAGES:
             anchor = '<div class="subcategory-links">' if '<div class="subcategory-links">' in text else '<div class="catalog-layout">'
             text = text.replace(anchor, collection_nav(coll_items) + anchor, 1)
+        # te same linki na górze panelu filtrów każdej strony katalogu, nad rozwiniętym drzewem "Kategorie"
+        # (na telefonie panel trafia do okna "Filtry")
+        text = re.sub(r'<details class="filter-group" data-collections-filter="" open="">.*?</details>', "", text, flags=re.S)
+        form_at = text.find('id="catalog-filter-form"')
+        if form_at > 0:
+            slots = [i for i in (text.find('<details class="filter-group"', form_at), text.find('<fieldset class="filter-group"', form_at)) if i > 0]
+            if slots:
+                text = text[:min(slots)] + collection_filter(coll_items) + text[min(slots):]
 
         if path in PAGES:
             text = set_title(text, PAGES[path]["title"])
