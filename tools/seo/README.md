@@ -15,6 +15,7 @@ python tools/seo/build_production.py
   - tytuły, opisy i H1;
   - canonical, Open Graph i JSON-LD;
   - strony marek i trzech sklepów oraz stronę 404;
+  - strony zbiorcze według technologii i pojemności: `/oferta/akumulatory-agm/`, `-efb/`, `-start-stop/`, `-60ah/`, `-74ah/` i `-100ah/`. Produkty dobiera sam skrypt według nazwy, kategorii i filtra `ah`. Linki do tych stron trafiają do oferty, działów samochodowych i na strony pasujących produktów. Listę stron zmienia się w `COLLECTIONS`;
   - `sitemap.xml`, `robots.txt` i `llms.txt`;
   - `.htaccess` i `_redirects`;
   - obrazy logo;

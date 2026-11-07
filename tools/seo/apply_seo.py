@@ -326,6 +326,178 @@ def build_brand_pages() -> dict[str, dict]:
     return meta
 
 
+# ---------------------------------------------------------------- collection pages (technologia i pojemność)
+# Katalog jest ułożony według działu > marki > serii, więc akumulatory AGM czy 74 Ah są rozrzucone po wielu gałęziach.
+# Strony zbiorcze odpowiadają na frazy z DataForSEO (2026-11-07): akumulator agm 8100, efb 2400, start-stop 1600,
+# akumulator 74ah 5400, 100ah 4400, 60ah 2900 wyszukiwań/mies. Zasady wymiany AGM/EFB: VARTA, "EFB and AGM differences"
+# oraz "Changing a start-stop battery" (varta-automotive.com).
+GROUP_SUFFIX = {"do-aut-osobowych": "do aut osobowych", "do-aut-ciezarowych-dostawczych-": "do aut ciężarowych i dostawczych",
+                "akumulatory-motocyklowe": "do motocykli", "akumulatory-marine-": "marine", "akumulatory-zelowe": "żelowe",
+                "akumulatory-rolnicze-": "do maszyn rolniczych", "akumulatory-do-kosiarek": "do kosiarek", "baterie-trakcyjne": "trakcyjne"}
+KOD = f'<a href="{PREFIX}uslugi/kodowanie-akumulatora/">kodowanie akumulatora</a>'
+PODTRZ = f'<a href="{PREFIX}uslugi/wymiana-akumulatora-z-podtrzymaniem-elektroniki/">wymianę z podtrzymaniem elektroniki</a>'
+COLL_NAV_PAGES = ("oferta/", "oferta/akumulatory-samochodowe/", "oferta/akumulatory-samochodowe/do-aut-osobowych/")
+
+
+def tech_text(p: dict) -> str:
+    return (p["title"] + " " + " ".join(categories[c]["name"] for c in p["categories"] if c in categories)).lower()
+
+
+def has_tech(p: dict, tech: str) -> bool:
+    return re.search(rf"\b{tech}\b", tech_text(p)) is not None
+
+
+def ah_value(p: dict) -> float | None:
+    try:
+        return float(str((p.get("filters") or {}).get("ah", "")).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def amps(p: dict) -> int | None:
+    try:
+        return int(float(str((p.get("filters") or {}).get("prad", "")).replace(",", ".")))
+    except ValueError:
+        return None
+
+
+def group_of(p: dict) -> str:
+    """Dział produktu do podziału strony zbiorczej: osobowe, ciężarowe, motocyklowe, żelowe..."""
+    real = [c for c in p["categories"] if c in categories and categories[c]["name"].strip().lower() != "sklep"]
+    deepest = max(real, key=lambda c: len(cat_chain(c)))
+    segs = to_path(categories[deepest]["url"]).split("/")[1:]
+    key = segs[1] if segs[0] == "akumulatory-samochodowe" and len(segs) > 2 and segs[1] else segs[0]
+    return GROUP_SUFFIX.get(key, sentence(cat_chain(deepest)[0]["name"].strip()).lower())
+
+
+def is_car_start_stop(p: dict) -> bool:
+    return (has_tech(p, "agm") or has_tech(p, "efb")) and group_of(p) == "do aut osobowych"
+
+
+def ah_text(n: int) -> list[tuple[str, str]]:
+    return [(f"Jak dobrać akumulator {n} Ah",
+             "<p>Sama pojemność nie wystarczy. Porównaj nowy akumulator z obecnym: prąd rozruchu (A, EN), biegunowość "
+             "(prawy albo lewy plus), wymiary i mocowanie, a w aucie ze start-stop także technologię "
+             f'(<a href="{PREFIX}oferta/akumulatory-efb/">EFB</a> albo <a href="{PREFIX}oferta/akumulatory-agm/">AGM</a>). '
+             "Najprościej podać nam model auta albo przyjechać do sklepu: dobierzemy akumulator i zamontujemy go przy odbiorze.</p>")]
+
+
+COLLECTIONS = [
+    {"slug": "akumulatory-agm", "h1": "Akumulatory AGM", "title": "Akumulatory AGM", "label": "AGM", "match": lambda p: has_tech(p, "agm"),
+     "text": [("Czym jest akumulator AGM",
+               "<p>AGM (Absorbent Glass Mat) to akumulator, w którym elektrolit jest uwięziony w macie z włókna szklanego. "
+               "Jest bezobsługowy i szczelny. W samochodach stosuje się go w autach z rozbudowanym systemem start-stop, "
+               "zwłaszcza z odzyskiem energii hamowania, i w autach z bogatym wyposażeniem elektrycznym. "
+               "W motocyklach AGM to popularna bezobsługowa wersja akumulatora.</p>"),
+              ("Wymiana akumulatora AGM",
+               "<p>AGM wymienia się tylko na AGM. Producenci akumulatorów, np. VARTA, odradzają montaż EFB w miejsce AGM, "
+               "bo system zarządzania energią auta jest dobrany do tej technologii. Po wymianie w aucie ze start-stop nowy akumulator "
+               f"trzeba zwykle dopisać do komputera auta: {KOD} jest bezpłatne przy zakupie akumulatora w naszym sklepie. "
+               f"Robimy też {PODTRZ}, żeby nie stracić ustawień.</p>")]},
+    {"slug": "akumulatory-efb", "h1": "Akumulatory EFB", "title": "Akumulatory EFB", "label": "EFB", "match": lambda p: has_tech(p, "efb"),
+     "text": [("Czym jest akumulator EFB",
+               "<p>EFB (Enhanced Flooded Battery) to ulepszony akumulator kwasowo-ołowiowy z płynnym elektrolitem, trwalszy "
+               "przy częstych rozruchach niż zwykły. Jest przeznaczony do aut z prostszym systemem start-stop, zwykle bez odzysku "
+               "energii hamowania, a także do aut, które jeżdżą głównie po mieście, i do aut z bogatszym wyposażeniem.</p>"),
+              ("Wymiana akumulatora EFB",
+               "<p>EFB można wymienić na EFB albo na AGM. AGM warto wybrać, gdy w aucie pracuje dużo odbiorników prądu albo "
+               "akumulator często się rozładowuje. W drugą stronę to nie działa: AGM zawsze zastępuje się AGM. "
+               f"Po wymianie w aucie ze start-stop wykonujemy {KOD}, przy zakupie u nas bezpłatnie.</p>")]},
+    {"slug": "akumulatory-start-stop", "h1": "Akumulatory do aut ze start-stop", "title": "Akumulatory start-stop",
+     "label": "do aut ze start-stop", "match": is_car_start_stop,
+     "text": [("EFB czy AGM do auta ze start-stop",
+               "<p>Decyduje to, jaki akumulator zamontował producent auta. AGM stosuje się w autach z rozbudowanym systemem "
+               "start-stop i odzyskiem energii hamowania, EFB w prostszych systemach. AGM wymienia się tylko na AGM, a EFB "
+               "na EFB albo AGM. Jeśli nie wiesz, jaki akumulator masz w aucie, podaj nam model albo przyjedź: sprawdzimy i dobierzemy.</p>"),
+              ("Wymiana akumulatora w aucie ze start-stop",
+               "<p>Akumulator start-stop współpracuje z czujnikiem i systemem zarządzania energią auta. Po wymianie nowy akumulator "
+               f"trzeba dopisać do komputera auta ({KOD}, przy zakupie u nas bezpłatne). Przez kilka godzin po wymianie start-stop "
+               f"może jeszcze nie działać, zanim auto rozpozna nowy akumulator. Robimy też {PODTRZ}.</p>")]},
+    *({"slug": f"akumulatory-{n}ah", "h1": f"Akumulatory {n} Ah", "title": f"Akumulatory {n}Ah", "label": f"{n} Ah",
+       "match": (lambda n: lambda p: ah_value(p) == n)(n), "text": ah_text(n)} for n in (60, 74, 100)),
+]
+
+
+def collection_items() -> dict[str, list[dict]]:
+    pool = [p for p in products.values() if p["id"] in product_pages and product_kind(p) == "battery"]
+    return {c["slug"]: sorted((p for p in pool if c["match"](p)),
+                              key=lambda p: (ah_value(p) or 0, amps(p) or 0, p["title"], p["id"])) for c in COLLECTIONS}
+
+
+def collection_links(items: dict[str, list[dict]], skip: str = "") -> str:
+    return " · ".join(f'<a href="{PREFIX}oferta/{c["slug"]}/">{esc(c["label"])}</a> ({len(items[c["slug"]])})'
+                      for c in COLLECTIONS if c["slug"] != skip and items[c["slug"]])
+
+
+def collection_nav(items: dict[str, list[dict]]) -> str:
+    tech = [c for c in COLLECTIONS if not c["slug"].endswith("ah")]
+    cap = [c for c in COLLECTIONS if c["slug"].endswith("ah")]
+    link = lambda c: f'<a href="{PREFIX}oferta/{c["slug"]}/">{esc(c["label"])}</a> ({len(items[c["slug"]])})'  # noqa: E731
+    return ('<div class="service-copy brand-copy collection-nav" data-collections=""><div class="prose"><p>'
+            f'Według technologii: {" · ".join(link(c) for c in tech)}. Popularne pojemności: {" · ".join(link(c) for c in cap)}.'
+            '</p></div></div>')
+
+
+def build_collection_pages(items: dict[str, list[dict]]) -> dict[str, dict]:
+    head_part, tail = shell(SITE / "marki" / "index.html")
+    meta = {}
+    for c in COLLECTIONS:
+        its = items[c["slug"]]
+        if not its:
+            continue
+        h1 = c["h1"]
+        groups = collections.Counter(group_of(p) for p in its)
+        # auta osobowe zawsze pierwsze: tak szuka większość (np. "akumulator agm" to głównie auta ze start-stop)
+        order = sorted(groups, key=lambda g: (g != "do aut osobowych", -groups[g], g))
+        bcount = collections.Counter(p["brand"] for p in its if p.get("brandId") in brands)
+        brand_ids = {p["brand"]: p["brandId"] for p in its if p.get("brandId") in brands}
+        blinks = ", ".join(f'<a href="{PREFIX}marki/{brand_slug[brand_ids[b]]}/">{esc(b)}</a>' for b, _ in bcount.most_common())
+        split = (" – " + ", ".join(f"{g} ({groups[g]})" for g in order)) if len(order) > 1 else ""
+        spec = ""
+        if c["slug"].endswith("ah"):
+            # bez liczenia biegunów: część produktów nie ma bieguna w danych, a w trzech dane są sprzeczne (README)
+            a = [amps(p) for p in its if amps(p)]
+            if a:
+                spec = f" Prąd rozruchu od {min(a)} do {max(a)} A."
+        intro = (f"<p>{esc(h1)} w naszej ofercie: {plural(len(its))}{split}. Marki: {blinks}.{spec} "
+                 f'Zapytaj o dostępność w sklepach w Tarnowie i Radłowie albo zadzwoń: <a href="tel:{PHONE}">{PHONE_DISPLAY}</a>. '
+                 "Przy odbiorze akumulatora w sklepie stacjonarnym montaż jest bezpłatny.</p>")
+        body = "".join(f"<h2>{esc(h)}</h2>{t}" for h, t in c["text"])
+        see = f'<p>Zobacz też: {collection_links(items, c["slug"])} · <a href="{PREFIX}oferta/">wszystkie akumulatory</a></p>'
+        if len(order) > 1:
+            grids = "".join(f'<section class="collection-group"><h2>{esc(h1)} {esc(g)}<span>{plural(groups[g])}</span></h2>'
+                            '<div class="product-grid">' + "".join(card(p) for p in its if group_of(p) == g) + "</div></section>"
+                            for g in order)
+        else:
+            grids = '<div class="product-grid">' + "".join(card(p) for p in its) + "</div>"
+        main = (f'<main id="main"><div class="page-top visual-page-top" style=\'--page-photo:url("{PHOTO}")\'>'
+                + crumbs_html([("Strona główna", PREFIX), ("Akumulatory", f"{PREFIX}oferta/"), (h1, "")])
+                + f'<h1>{esc(h1)}</h1></div>'
+                + '<div class="service-copy brand-copy"><div class="prose">' + intro + body + see + "</div></div>"
+                + f'<div class="catalog-results brand-results collection-results"><div class="results-toolbar"><p>{plural(len(its))}</p></div>'
+                + grids + "</div></main>")
+        top = ", ".join(b for b, _ in bcount.most_common(3))
+        desc = fit_desc(*(f"{h1}: {plural(len(its))}" + (f" ({top})" if top else "") + "." + t for t in (
+            f" Bezpłatny montaż przy odbiorze w sklepie – Tarnów (Krakowska 150, Giełdowa 5) i Radłów. Tel. {PHONE_DISPLAY}.",
+            f" Bezpłatny montaż przy odbiorze w sklepie w Tarnowie i Radłowie. Tel. {PHONE_DISPLAY}.",
+            " Bezpłatny montaż przy odbiorze w sklepie w Tarnowie i Radłowie.")))
+        page = head_part + main + tail
+        page = set_title(page, f'{c["title"]} Tarnów | {BRAND}')
+        page = set_description(page, desc)
+        path = f'oferta/{c["slug"]}/'
+        write(SITE / path / "index.html", page)
+        meta[path] = {"name": h1, "description": desc, "items": [to_path(p["url"]) for p in its]}
+    return meta
+
+
+def product_collections_html(p: dict, items: dict[str, list[dict]]) -> str:
+    own = [c for c in COLLECTIONS if any(x["id"] == p["id"] for x in items[c["slug"]])]
+    if not own:
+        return ""
+    return ('<p class="product-collections" data-collections="">Zobacz też: '
+            + " · ".join(f'<a href="{PREFIX}oferta/{c["slug"]}/">{esc(c["h1"])}</a>' for c in own) + "</p>")
+
+
 def build_location_pages() -> None:
     head_part, tail = shell(SITE / "nasze-sklepy" / "index.html")
     for loc in LOCATIONS:
@@ -523,6 +695,16 @@ def patch_assets() -> None:
     a = SITE / "assets"
     patch(a / "catalog.css", [("assets/media/logo-akumulatory-tarnow.png'", "assets/media/logo-akumulatory-tarnow-400.webp'")])
     patch(a / "mobile.css", [("assets/media/logo-akumulatory-tarnow.png'", "assets/media/logo-akumulatory-tarnow-400.webp'")])
+    # strony zbiorcze: nagłówki grup produktów i linki "Zobacz też" na stronach produktów
+    css = read(a / "catalog.css")
+    if "/* seo: strony zbiorcze */" not in css:
+        write(a / "catalog.css", css.rstrip("\n") + "\n/* seo: strony zbiorcze */\n"
+              ".collection-group+.collection-group{margin-top:48px}"
+              ".collection-group>h2{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:22px;line-height:1.3;letter-spacing:-.02em;margin:0 0 18px}"
+              ".collection-group>h2 span{color:var(--muted);font-size:13px;font-weight:400;letter-spacing:0}"
+              ".collection-nav{margin-bottom:40px}"
+              ".product-collections{margin-top:18px;font-size:13px;line-height:1.6;color:var(--muted)}"
+              ".product-collections a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}\n")
     # CLS desktop: hero przechodzi na position:absolute; wyśrodkowanie przez inset:0 + margin:auto zamiast
     # left/top:50% + translate, żeby pozycja layoutu (liczona przez CLS bez transformacji) się nie zmieniała.
     vh = read(a / "video-hero.css").replace("\n.enhanced-motion .film-story>.energy-camera{height:100svh}", "")
@@ -622,6 +804,8 @@ def main() -> None:
     optimize_images()
     patch_assets()
     brand_meta = build_brand_pages()
+    coll_items = collection_items()
+    coll_meta = build_collection_pages(coll_items)
     build_location_pages()
     build_404()
     href_brand = {bid: f"{PREFIX}marki/{brand_slug[bid]}/" for bid in brands}
@@ -654,6 +838,11 @@ def main() -> None:
         text = re.sub(r'(?<!data-filter-link="" )href="/akumulatory-tarnow-v2/oferta/\?marka=(\d+)"', lambda m: f'href="{href_brand.get(int(m.group(1)), PREFIX + "marki/")}"', text)
         text = re.sub(r'"href": "/akumulatory-tarnow-v2/oferta/\?marka=(\d+)"', lambda m: f'"href": "{href_brand.get(int(m.group(1)), PREFIX + "marki/")}"', text)
         text = text.replace('<img alt="" data-large-image=""/>', '<span data-large-image-slot=""></span>')
+        # linki do stron zbiorczych (AGM, EFB, start-stop, pojemności) na stronie oferty i w działach samochodowych
+        text = re.sub(r'<div class="service-copy brand-copy collection-nav" data-collections="">.*?</p></div></div>', "", text, flags=re.S)
+        if path in COLL_NAV_PAGES:
+            anchor = '<div class="subcategory-links">' if '<div class="subcategory-links">' in text else '<div class="catalog-layout">'
+            text = text.replace(anchor, collection_nav(coll_items) + anchor, 1)
 
         if path in PAGES:
             text = set_title(text, PAGES[path]["title"])
@@ -712,6 +901,16 @@ def main() -> None:
             if props:
                 prod["additionalProperty"] = props
             graph = [prod]
+            text = re.sub(r'<p class="product-collections" data-collections="">.*?</p>', "", text, flags=re.S)
+            see = product_collections_html(p, coll_items) if p else ""
+            if see:
+                text = re.sub(r'(<dl class="product-parameters">.*?</dl>)', lambda m: m.group(1) + see, text, count=1, flags=re.S)
+        elif path in coll_meta:
+            m = coll_meta[path]
+            graph = [{"@type": "CollectionPage", "name": m["name"], "description": m["description"], "url": prod_url(path),
+                      "inLanguage": "pl-PL", "isPartOf": {"@id": SITE_ID},
+                      "mainEntity": {"@type": "ItemList", "numberOfItems": len(m["items"]),
+                                     "itemListElement": [{"@type": "ListItem", "position": i, "url": prod_url(u)} for i, u in enumerate(m["items"], 1)]}}]
         elif path.startswith("oferta/") and path != "oferta/":
             c = cat_by_path.get(path)
             if c:
@@ -777,7 +976,8 @@ def main() -> None:
 
     write_static_files(sitemap)
     write_redirects()
-    print(f"brand pages: {len(brand_meta)}, location pages: {len(LOCATIONS)}, h1 fixes: {dup_h1_fixed}, sitemap urls: {len(sitemap)}")
+    print(f"brand pages: {len(brand_meta)}, collection pages: {len(coll_meta)}, location pages: {len(LOCATIONS)}, "
+          f"h1 fixes: {dup_h1_fixed}, sitemap urls: {len(sitemap)}")
 
 
 def write_static_files(urls: list[str]) -> None:
@@ -789,7 +989,9 @@ def write_static_files(urls: list[str]) -> None:
     write(SITE / "llms.txt", f"# {BRAND} (Tarnów)\n\n> Sklep z akumulatorami i mobilne pogotowie akumulatorowe w Tarnowie i Radłowie: sprzedaż, dowóz, montaż, test i kodowanie akumulatorów.\n\n"
           f"Telefon: {PHONE_DISPLAY}. E-mail: {EMAIL}. Autoryzowana Stacja Obsługi Akumulatorów Banner.\n\n## Sklepy\n{loc_lines}\n\n"
           f"## Najważniejsze strony\n- Oferta: {PROD_ORIGIN}/oferta/\n- Marki: {PROD_ORIGIN}/marki/\n- Usługi: {PROD_ORIGIN}/uslugi/\n"
-          f"- Pogotowie akumulatorowe: {PROD_ORIGIN}/uslugi/odpalenie-unieruchomionego-pojazdu/\n- Porady: {PROD_ORIGIN}/porady/\n\n"
+          f"- Pogotowie akumulatorowe: {PROD_ORIGIN}/uslugi/odpalenie-unieruchomionego-pojazdu/\n- Porady: {PROD_ORIGIN}/porady/\n"
+          + "".join(f"- {c['h1']}: {PROD_ORIGIN}/oferta/{c['slug']}/\n" for c in COLLECTIONS
+                    if (SITE / "oferta" / c["slug"] / "index.html").exists()) + "\n"
           "## Gratis\n" + "\n".join(f"- {s}" for s in FREE_SERVICES) + "\n")
 
 
